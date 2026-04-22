@@ -1,0 +1,28 @@
+# Build artifacts
+*.o
+*.obj
+*.so
+*.a
+*.out
+
+# Test/build binaries
+run_tests
+run_tests_asan
+
+# CMake/Ninja artifacts (if used later)
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+
+# Editor/IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
