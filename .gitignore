@@ -8,6 +8,8 @@
 # Test/build binaries
 run_tests
 run_tests_asan
+run_tests_ubsan
+run_tests_norecn
 
 # CMake/Ninja artifacts (if used later)
 build/
