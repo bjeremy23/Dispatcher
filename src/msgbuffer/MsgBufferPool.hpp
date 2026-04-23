@@ -41,7 +41,7 @@ public:
     std::size_t poolSize()  const noexcept;
 
 private:
-    void returnBuffer(MsgBuffer* buf);
+    void release(MsgBuffer* buf);
 
     mutable std::mutex               mutex_;
     std::vector<std::unique_ptr<MsgBuffer>> pool_;

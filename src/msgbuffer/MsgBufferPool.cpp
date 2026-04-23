@@ -35,7 +35,7 @@ std::shared_ptr<MsgBuffer> MsgBufferPool::acquire() {
 
         auto* raw = buf.release();
         return std::shared_ptr<MsgBuffer>(raw, [this](MsgBuffer* b) {
-            returnBuffer(b);
+            release(b);
         });
     }
 
@@ -48,7 +48,7 @@ std::shared_ptr<MsgBuffer> MsgBufferPool::acquire() {
     throw PoolExhaustedException("MsgBufferPool: pool exhausted");
 }
 
-void MsgBufferPool::returnBuffer(MsgBuffer* buf) {
+void MsgBufferPool::release(MsgBuffer* buf) {
     buf->clear();
     std::lock_guard lock(mutex_);
     pool_.push_back(std::unique_ptr<MsgBuffer>(buf));

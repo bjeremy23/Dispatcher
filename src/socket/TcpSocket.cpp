@@ -1,4 +1,4 @@
-#include "TcpSocket.hpp"
+#include "TcpSocketDetail.hpp"
 
 #include "../dispatcher/ExecutorContext.hpp"
 #include "../msgbuffer/MsgBuffer.hpp"
@@ -10,15 +10,13 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/write.hpp>
 
+#include <utility>
+
 namespace dispatcher {
 
-struct TcpSocket::Impl {
-    explicit Impl(boost::asio::any_io_executor exec)
-        : socket(std::move(exec))
-    {}
-
-    boost::asio::ip::tcp::socket socket;
-};
+TcpSocket::TcpSocket(std::unique_ptr<Impl> impl)
+    : impl_(std::move(impl))
+{}
 
 TcpSocket::TcpSocket()
     : impl_(std::make_unique<Impl>(ExecutorContext::get()))
@@ -27,6 +25,26 @@ TcpSocket::TcpSocket()
 TcpSocket::~TcpSocket() = default;
 TcpSocket::TcpSocket(TcpSocket&&) noexcept = default;
 TcpSocket& TcpSocket::operator=(TcpSocket&&) noexcept = default;
+
+std::error_code TcpSocket::listen(uint16_t port) {
+    boost::system::error_code ec;
+    auto& acc = impl_->acceptor.emplace(impl_->socket.get_executor());
+    acc.open(boost::asio::ip::tcp::v4(), ec);                              if (ec) return ec;
+    acc.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
+    acc.bind(boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port), ec); if (ec) return ec;
+    acc.listen(boost::asio::socket_base::max_listen_connections, ec);
+    return ec;
+}
+
+boost::asio::awaitable<std::pair<TcpSocket, std::error_code>> TcpSocket::accept() {
+    boost::system::error_code ec;
+    boost::asio::ip::tcp::socket raw(impl_->acceptor->get_executor());
+    co_await impl_->acceptor->async_accept(
+        raw, boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+    if (ec)
+        co_return std::pair{TcpSocket{}, std::error_code{ec}};
+    co_return std::pair{TcpSocket(std::make_unique<Impl>(std::move(raw))), std::error_code{}};
+}
 
 boost::asio::awaitable<std::error_code>
 TcpSocket::connect(std::string_view host, uint16_t port) {

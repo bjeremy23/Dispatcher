@@ -19,6 +19,8 @@ public:
     // sockets can be constructed without an explicit Dispatcher reference.
     // threadCount = 1 : single-threaded; call run() to drive the loop.
     // threadCount > 1 : internal thread pool; run() participates as one thread.
+    static Dispatcher& instance();
+
     explicit Dispatcher(std::size_t threadCount = 1);
     ~Dispatcher();
 

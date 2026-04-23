@@ -58,7 +58,7 @@ TEST_F(UdpSocketTest, SendAndReceiveLoopback) {
         EXPECT_FALSE(ec) << ec.message();
         if (ec) co_return;
 
-        NetworkEndpoint target{"127.0.0.1", serverPort};
+        NetworkEndpoint target{dispatcher::IpAddress("127.0.0.1", AF_INET), serverPort};
         ec = client.sendTo(
             std::span<const char>(message.data(), message.size()), target);
         EXPECT_FALSE(ec) << ec.message();

@@ -72,7 +72,8 @@ std::error_code UdpSocket::receiveFrom(MsgBuffer& buf, NetworkEndpoint& sender) 
 
     if (!ec) {
         buf.setSize(n);
-        sender.address = ep.address().to_string();
+        sender.address = IpAddress(ep.address().to_string(),
+                                   ep.address().is_v4() ? AF_INET : AF_INET6);
         sender.port    = ep.port();
     }
     return ec;
@@ -80,7 +81,7 @@ std::error_code UdpSocket::receiveFrom(MsgBuffer& buf, NetworkEndpoint& sender) 
 
 std::error_code UdpSocket::sendTo(std::span<const char> data, const NetworkEndpoint& target) {
     boost::system::error_code ec;
-    auto addr = boost::asio::ip::make_address(target.address, ec);
+    auto addr = boost::asio::ip::make_address(target.address.toString(), ec);
     if (ec) return ec;
 
     boost::asio::ip::udp::endpoint ep(addr, target.port);

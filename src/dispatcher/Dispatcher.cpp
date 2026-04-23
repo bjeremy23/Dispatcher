@@ -20,6 +20,11 @@ struct Dispatcher::Impl {
     const std::size_t threadCount;
 };
 
+Dispatcher& Dispatcher::instance() {
+    static Dispatcher inst;
+    return inst;
+}
+
 Dispatcher::Dispatcher(std::size_t threadCount)
     : impl_(std::make_unique<Impl>(threadCount))
 {

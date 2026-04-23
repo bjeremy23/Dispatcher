@@ -8,6 +8,9 @@
 
 #include <atomic>
 #include <chrono>
+#include <mutex>
+#include <set>
+#include <thread>
 
 using dispatcher::Dispatcher;
 using namespace std::chrono_literals;
@@ -59,39 +62,38 @@ TEST_F(DispatcherFixture, MultipleCoroutinesRunConcurrently) {
 }
 
 TEST_F(DispatcherFixture, CancelStopsCoroutineAtAwaitPoint) {
-    std::atomic<bool> reachedAfterAwait{false};
+    boost::system::error_code cancelEc;
 
     auto handle = dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
         boost::asio::steady_timer t(co_await boost::asio::this_coro::executor);
-        t.expires_after(10s); // long timer — will be cancelled
-        boost::system::error_code ec;
-        co_await t.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-        // Only reaches here if cancelled or timer fires
-        reachedAfterAwait = true;
+        t.expires_after(10s);
+        co_await t.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, cancelEc));
         dispatcher.stop();
     });
 
-    // Cancel after a short delay from another coroutine
     dispatcher.spawn([&, h = std::move(handle)]() mutable -> boost::asio::awaitable<void> {
         boost::asio::steady_timer t(co_await boost::asio::this_coro::executor);
         t.expires_after(10ms);
         co_await t.async_wait(boost::asio::use_awaitable);
         h.cancel();
-        dispatcher.stop();
     });
 
     dispatcher.run();
-    // The long-timer coroutine was cancelled — it may or may not reach after-await
-    // depending on cancellation delivery; the important thing is run() returned.
-    SUCCEED();
+    EXPECT_EQ(cancelEc, boost::asio::error::operation_aborted);
 }
 
 TEST(DispatcherMultiThreadTest, MultipleThreadsShareWork) {
     Dispatcher dispatcher(4);
     std::atomic<int> count{0};
+    std::mutex idMutex;
+    std::set<std::thread::id> threadIds;
 
     for (int i = 0; i < 8; ++i) {
         dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
+            {
+                std::lock_guard lock(idMutex);
+                threadIds.insert(std::this_thread::get_id());
+            }
             if (++count == 8) dispatcher.stop();
             co_return;
         });
@@ -99,4 +101,8 @@ TEST(DispatcherMultiThreadTest, MultipleThreadsShareWork) {
 
     dispatcher.run();
     EXPECT_EQ(count, 8);
+
+    std::cout << "[   INFO   ] Coroutines ran on " << threadIds.size() << " thread(s):\n";
+    for (auto id : threadIds)
+        std::cout << "[   INFO   ]   " << id << "\n";
 }
