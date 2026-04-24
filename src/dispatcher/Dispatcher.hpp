@@ -33,19 +33,15 @@ public:
     template<typename Factory>
     CoroutineHandle spawn(Factory&& factory) {
         CoroutineHandle handle;
-        // sig is captured in the completion handler, which co_spawn_entry_point
-        // keeps alive until its very last dispatch call. This ensures the
-        // cancellation_signal (and the proxy signal emplace'd into its slot by
-        // co_spawn) outlives every cancellation_state access inside the entry point.
-        // The factory is passed directly so co_spawn moves it into
-        // co_spawn_entry_point's own frame, fixing the lambda-lifetime problem.
-        auto sig = handle.signal_;
+        auto sig     = handle.signal_;
+        auto running = handle.running_;
+        *running = true;
         boost::asio::co_spawn(
             boost::asio::make_strand(ioContext()),
             std::forward<Factory>(factory),
             boost::asio::bind_cancellation_slot(
                 handle.slot(),
-                [sig](std::exception_ptr) {}));
+                [sig, running](std::exception_ptr) { *running = false; }));
         return handle;
     }
 

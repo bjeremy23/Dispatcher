@@ -2,6 +2,7 @@
 
 #include <boost/asio/cancellation_signal.hpp>
 
+#include <atomic>
 #include <memory>
 
 namespace dispatcher {
@@ -22,13 +23,15 @@ public:
     CoroutineHandle& operator=(const CoroutineHandle&) = delete;
 
     void cancel();
+    bool running() const;
 
 private:
     friend class Dispatcher;
     boost::asio::cancellation_slot slot();
 
-    // shared_ptr lets spawn() capture a copy so the signal outlives the coroutine frame.
     std::shared_ptr<boost::asio::cancellation_signal> signal_;
+    // Set true by spawn(), false by the completion handler when the coroutine exits.
+    std::shared_ptr<std::atomic<bool>> running_;
 };
 
 } // namespace dispatcher

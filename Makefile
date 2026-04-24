@@ -2,7 +2,7 @@ CXX      := g++
 CXXFLAGS := -std=c++20 -Wall -Wextra -I src
 LDFLAGS  := -lboost_system -lpthread
 
-SRC_DIRS := src/dispatcher src/socket src/msgbuffer
+SRC_DIRS := src/dispatcher src/socket src/msgbuffer src/signaler src/timer
 TEST_DIR := test
 
 SRCS     := $(foreach d,$(SRC_DIRS),$(wildcard $(d)/*.cpp))
