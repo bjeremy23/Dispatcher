@@ -8,6 +8,11 @@
 
 namespace dispatcher {
 
+Dispatcher& Dispatcher::instance() {
+    static Dispatcher inst;
+    return inst;
+}
+    
 struct Dispatcher::Impl {
     explicit Impl(std::size_t threadCount)
         : workGuard(boost::asio::make_work_guard(ctx))
@@ -19,11 +24,6 @@ struct Dispatcher::Impl {
     std::vector<std::thread> threads;
     const std::size_t threadCount;
 };
-
-Dispatcher& Dispatcher::instance() {
-    static Dispatcher inst;
-    return inst;
-}
 
 Dispatcher::Dispatcher(std::size_t threadCount)
     : impl_(std::make_unique<Impl>(threadCount))

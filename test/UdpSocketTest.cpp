@@ -28,18 +28,14 @@ TEST_F(UdpSocketTest, SendAndReceiveLoopback) {
 
     // Receiver coroutine.
     dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
-        auto server = dispatcher::UdpSocket();
-        auto ec     = server.bind(serverPort);
-        EXPECT_FALSE(ec) << ec.message();
-        if (ec) { dispatcher.stop(); co_return; }
-
-        ec = co_await server.waitReadable();
+        dispatcher::UdpSocket server(NetworkEndpoint{dispatcher::IpAddress{uint32_t(INADDR_ANY)}, serverPort});
+        auto ec = server.bind();
         EXPECT_FALSE(ec) << ec.message();
         if (ec) { dispatcher.stop(); co_return; }
 
         auto buf = pool.acquire();
         NetworkEndpoint sender;
-        ec = server.receiveFrom(*buf, sender);
+        ec = co_await server.receiveFrom(*buf, sender);
         EXPECT_FALSE(ec) << ec.message();
 
         received = std::string(buf->data(), buf->size());
@@ -54,12 +50,8 @@ TEST_F(UdpSocketTest, SendAndReceiveLoopback) {
         co_await t.async_wait(boost::asio::use_awaitable);
 
         auto client = dispatcher::UdpSocket();
-        auto ec     = co_await client.waitWritable();
-        EXPECT_FALSE(ec) << ec.message();
-        if (ec) co_return;
-
         NetworkEndpoint target{dispatcher::IpAddress("127.0.0.1", AF_INET), serverPort};
-        ec = client.sendTo(
+        auto ec = co_await client.sendTo(
             std::span<const char>(message.data(), message.size()), target);
         EXPECT_FALSE(ec) << ec.message();
     });

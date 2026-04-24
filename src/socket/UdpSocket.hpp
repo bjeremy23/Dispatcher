@@ -1,38 +1,39 @@
 #pragma once
 
-#include "Socket.hpp"
 #include "NetworkEndpoint.hpp"
+
+#include <boost/asio/awaitable.hpp>
 
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <system_error>
 
 namespace dispatcher {
 
-class UdpSocket : public Socket {
+class MsgBuffer;
+
+class UdpSocket {
 public:
-    // Reads the executor from ExecutorContext — a Dispatcher must exist first.
+    // Client side: reads the executor from ExecutorContext — a Dispatcher must exist first.
     UdpSocket();
-    ~UdpSocket() override;
+    // Server side: binds to the given endpoint when bind() is called.
+    explicit UdpSocket(NetworkEndpoint localEndpoint);
+    ~UdpSocket();
 
     UdpSocket(UdpSocket&&) noexcept;
     UdpSocket& operator=(UdpSocket&&) noexcept;
     UdpSocket(const UdpSocket&) = delete;
     UdpSocket& operator=(const UdpSocket&) = delete;
 
-    // Bind to a local port for receiving datagrams.
-    std::error_code bind(uint16_t port);
+    // Bind to the local endpoint from the constructor.
+    std::error_code bind();
 
-    // Socket interface (send/receive without explicit endpoint).
-    boost::asio::awaitable<std::error_code> waitReadable() override;
-    boost::asio::awaitable<std::error_code> waitWritable() override;
-    std::error_code read(MsgBuffer& buf)               override;
-    std::error_code write(std::span<const char> data)  override;
+    // Receive a datagram and record the sender's address.
+    boost::asio::awaitable<std::error_code> receiveFrom(MsgBuffer& buf, NetworkEndpoint& sender);
 
-    // UDP-specific: receive and record the sender's address.
-    std::error_code receiveFrom(MsgBuffer& buf, NetworkEndpoint& sender);
-
-    // UDP-specific: send to an explicit destination.
-    std::error_code sendTo(std::span<const char> data, const NetworkEndpoint& target);
+    // Send a datagram to an explicit destination.
+    boost::asio::awaitable<std::error_code> sendTo(std::span<const char> data, const NetworkEndpoint& target);
 
 private:
     struct Impl;

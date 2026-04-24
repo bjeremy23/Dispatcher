@@ -27,8 +27,8 @@ TEST_F(TcpSocketTest, ConnectAndExchangeData) {
 
     // Server coroutine: listen, accept one connection, read data, stop.
     dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
-        dispatcher::TcpSocket server;
-        auto ec = server.listen(port);
+        dispatcher::TcpSocket server(dispatcher::NetworkEndpoint{dispatcher::IpAddress{uint32_t(INADDR_ANY)}, port});
+        auto ec = server.listen();
         EXPECT_FALSE(ec) << ec.message();
         if (ec) { dispatcher.stop(); co_return; }
 
@@ -36,12 +36,8 @@ TEST_F(TcpSocketTest, ConnectAndExchangeData) {
         EXPECT_FALSE(acceptEc) << acceptEc.message();
         if (acceptEc) { dispatcher.stop(); co_return; }
 
-        acceptEc = co_await client.waitReadable();
-        EXPECT_FALSE(acceptEc) << acceptEc.message();
-        if (acceptEc) { dispatcher.stop(); co_return; }
-
         auto buf = pool.acquire();
-        acceptEc = client.read(*buf);
+        acceptEc = co_await client.read(*buf);
         EXPECT_FALSE(acceptEc) << acceptEc.message();
         received = std::string(buf->data(), buf->size());
 
@@ -60,11 +56,7 @@ TEST_F(TcpSocketTest, ConnectAndExchangeData) {
         EXPECT_FALSE(ec) << ec.message();
         if (ec) co_return;
 
-        ec = co_await client.waitWritable();
-        EXPECT_FALSE(ec) << ec.message();
-        if (ec) co_return;
-
-        ec = client.write(std::span<const char>(message.data(), message.size()));
+        ec = co_await client.write(std::span<const char>(message.data(), message.size()));
         EXPECT_FALSE(ec) << ec.message();
     });
 
