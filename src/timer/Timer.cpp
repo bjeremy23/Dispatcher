@@ -53,9 +53,10 @@ void Timer::start(std::chrono::steady_clock::duration interval,
                 boost::system::error_code ec;
                 co_await impl_->timer.async_wait(
                     boost::asio::redirect_error(boost::asio::use_awaitable, ec));
-                if (!*active || ec == boost::asio::error::operation_aborted) co_return;
+                if (!*active) co_return;
+                if (ec) { *active = false; co_return; }
                 co_await factory();
-                if (!*active || mode == Mode::OneShot) co_return;
+                if (!*active || mode == Mode::OneShot) { *active = false; co_return; }
             }
         });
 }

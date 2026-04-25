@@ -1,22 +1,21 @@
 #pragma once
 
 #include <functional>
+#include <initializer_list>
 #include <memory>
 
 namespace dispatcher {
 
 class Dispatcher;
 
-// Listens for POSIX signals and invokes a callback when one fires.
-// By default the callback stops the Dispatcher. Call add()/remove() to
-// manage the set of watched signals; the internal coroutine is reset
-// automatically whenever the set changes.
+// Listens for POSIX signals and invokes a per-signal callback when one fires.
+// Call add() to register a signal and its handler; omit the handler to use the
+// default (stop the dispatcher). Call remove() to deregister.
 class Signaler {
 public:
     using Callback = std::function<void()>;
 
-    // onSignal defaults to stopping the given dispatcher.
-    explicit Signaler(Dispatcher& dispatcher, Callback onSignal = {});
+    explicit Signaler(Dispatcher& dispatcher);
     ~Signaler();
 
     Signaler(const Signaler&) = delete;
@@ -24,8 +23,9 @@ public:
     Signaler(Signaler&&) = delete;
     Signaler& operator=(Signaler&&) = delete;
 
-    void add(int signo);
-    void remove(int signo);
+    // Default callback stops the dispatcher.
+    void add(std::initializer_list<int> signals, Callback callback = {});
+    void remove(std::initializer_list<int> signals);
 
 private:
     void respawn();

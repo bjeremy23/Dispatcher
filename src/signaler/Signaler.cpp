@@ -4,35 +4,31 @@
 #include "../dispatcher/Dispatcher.hpp"
 #include "../dispatcher/ExecutorContext.hpp"
 
-#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <atomic>
+#include <map>
 #include <memory>
-#include <set>
 
 namespace dispatcher {
 
 struct Signaler::Impl {
-    Impl(Dispatcher& dispatcher, Callback cb)
+    explicit Impl(Dispatcher& dispatcher)
         : dispatcher(dispatcher)
-        , onSignal(std::move(cb))
         , signals(ExecutorContext::get())
     {}
 
     Dispatcher&                         dispatcher;
-    Callback                            onSignal;
     boost::asio::signal_set             signals;
     CoroutineHandle                     handle;
-    std::set<int>                       registered;
+    std::map<int, Callback>             handlers;
     std::shared_ptr<std::atomic<bool>>  active{std::make_shared<std::atomic<bool>>(false)};
 };
 
-Signaler::Signaler(Dispatcher& dispatcher, Callback onSignal)
-    : impl_(std::make_unique<Impl>(
-          dispatcher,
-          onSignal ? std::move(onSignal) : Callback([&dispatcher] { dispatcher.stop(); })))
+Signaler::Signaler(Dispatcher& dispatcher)
+    : impl_(std::make_unique<Impl>(dispatcher))
 {}
 
 Signaler::~Signaler() {
@@ -40,17 +36,24 @@ Signaler::~Signaler() {
     impl_->signals.cancel();
 }
 
-void Signaler::add(int signo) {
-    impl_->signals.add(signo);
-    impl_->registered.insert(signo);
+void Signaler::add(std::initializer_list<int> signals, Callback callback) {
+    Callback cb = callback
+        ? std::move(callback)
+        : Callback([&d = impl_->dispatcher] { d.stop(); });
+    for (int signo : signals) {
+        impl_->signals.add(signo);
+        impl_->handlers[signo] = cb;
+    }
     if (!impl_->handle.running())
         respawn();
 }
 
-void Signaler::remove(int signo) {
-    impl_->signals.remove(signo);
-    impl_->registered.erase(signo);
-    if (!impl_->registered.empty())
+void Signaler::remove(std::initializer_list<int> signals) {
+    for (int signo : signals) {
+        impl_->signals.remove(signo);
+        impl_->handlers.erase(signo);
+    }
+    if (!impl_->handlers.empty())
         respawn();
 }
 
@@ -63,11 +66,14 @@ void Signaler::respawn() {
     impl_->handle = impl_->dispatcher.spawn([this, active]() -> boost::asio::awaitable<void> {
         if (!*active) co_return;
         while (true) {
-            boost::system::error_code ec;
-            co_await impl_->signals.async_wait(
-                boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+            auto [ec, signo] = co_await impl_->signals.async_wait(
+                boost::asio::as_tuple(boost::asio::use_awaitable));
             if (!*active || ec == boost::asio::error::operation_aborted) co_return;
-            if (!ec) impl_->onSignal();
+            if (!ec) {
+                auto it = impl_->handlers.find(signo);
+                if (it != impl_->handlers.end())
+                    it->second();
+            }
         }
     });
 }
