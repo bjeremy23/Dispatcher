@@ -82,6 +82,28 @@ TEST_F(DispatcherFixture, CancelStopsCoroutineAtAwaitPoint) {
     EXPECT_EQ(cancelEc, boost::asio::error::operation_aborted);
 }
 
+TEST_F(DispatcherFixture, CancelFromOutsideCoroutine) {
+    std::atomic<bool> cancelled{false};
+
+    auto handle = dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
+        boost::asio::steady_timer t(co_await boost::asio::this_coro::executor);
+        t.expires_after(10s);
+        boost::system::error_code ec;
+        co_await t.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+        cancelled = (ec == boost::asio::error::operation_aborted);
+        dispatcher.stop();
+    });
+
+    std::thread canceller([&] {
+        std::this_thread::sleep_for(10ms);
+        handle.cancel();
+    });
+
+    dispatcher.run();
+    canceller.join();
+    EXPECT_TRUE(cancelled);
+}
+
 TEST(DispatcherMultiThreadTest, MultipleThreadsShareWork) {
     Dispatcher dispatcher(4);
     std::atomic<int> count{0};
