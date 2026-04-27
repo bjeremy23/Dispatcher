@@ -83,9 +83,9 @@ TEST_F(SignalerFixture, MultipleSignalsSameCallback) {
 TEST_F(SignalerFixture, RemoveSignalStopsHandlingIt) {
     std::atomic<bool> called{false};
     Signaler signaler(dispatcher);
-    signaler.add({SIGUSR1}, [&] { called = true; });
+    auto id = signaler.add({SIGUSR1}, [&] { called = true; });
     signaler.add({SIGUSR2}, [&] { dispatcher.stop(); });
-    signaler.remove({SIGUSR1});
+    signaler.remove(id);
 
     std::thread t([this] { dispatcher.run(); });
 
@@ -94,4 +94,37 @@ TEST_F(SignalerFixture, RemoveSignalStopsHandlingIt) {
     t.join();
 
     EXPECT_FALSE(called.load());
+}
+
+TEST_F(SignalerFixture, MultipleCallbacksSameSignal) {
+    std::atomic<int> countA{0}, countB{0};
+    Signaler signaler(dispatcher);
+    signaler.add({SIGUSR1}, [&] { countA++; });
+    signaler.add({SIGUSR1}, [&] { countB++; dispatcher.stop(); });
+
+    std::thread t([this] { dispatcher.run(); });
+
+    std::this_thread::sleep_for(20ms);
+    std::raise(SIGUSR1);
+    t.join();
+
+    EXPECT_EQ(countA.load(), 1);
+    EXPECT_EQ(countB.load(), 1);
+}
+
+TEST_F(SignalerFixture, RemoveOneSubscriberLeavesOthers) {
+    std::atomic<bool> calledA{false}, calledB{false};
+    Signaler signaler(dispatcher);
+    auto idA = signaler.add({SIGUSR1}, [&] { calledA = true; });
+    signaler.add({SIGUSR1}, [&] { calledB = true; dispatcher.stop(); });
+    signaler.remove(idA);
+
+    std::thread t([this] { dispatcher.run(); });
+
+    std::this_thread::sleep_for(20ms);
+    std::raise(SIGUSR1);
+    t.join();
+
+    EXPECT_FALSE(calledA.load());
+    EXPECT_TRUE(calledB.load());
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../dispatcher/Dispatcher.hpp"
+
 #include <boost/asio/awaitable.hpp>
 
 #include <chrono>
@@ -25,8 +27,14 @@ public:
     Timer(const Timer&) = delete;
     Timer& operator=(const Timer&) = delete;
 
-    // Starts the timer, cancelling any previously running one.
+    // Starts the timer on a new strand, cancelling any previously running one.
     void start(std::chrono::steady_clock::duration interval,
+               Factory factory,
+               Mode mode = Mode::OneShot);
+
+    // Starts the timer on an inherited strand for synchronization with the caller.
+    void start(Dispatcher::Strand strand,
+               std::chrono::steady_clock::duration interval,
                Factory factory,
                Mode mode = Mode::OneShot);
 
@@ -34,6 +42,11 @@ public:
     bool running() const;
 
 private:
+    void startOn(Dispatcher::Strand strand,
+                 std::chrono::steady_clock::duration interval,
+                 Factory factory,
+                 Mode mode);
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

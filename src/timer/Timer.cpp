@@ -40,12 +40,30 @@ void Timer::start(std::chrono::steady_clock::duration interval,
                   Factory factory,
                   Mode mode)
 {
+    startOn(impl_->dispatcher.newStrand(),
+            interval, std::move(factory), mode);
+}
+
+void Timer::start(Dispatcher::Strand strand,
+                  std::chrono::steady_clock::duration interval,
+                  Factory factory,
+                  Mode mode)
+{
+    startOn(strand, interval, std::move(factory), mode);
+}
+
+void Timer::startOn(Dispatcher::Strand strand,
+                    std::chrono::steady_clock::duration interval,
+                    Factory factory,
+                    Mode mode)
+{
     *impl_->active = false;
     impl_->active = std::make_shared<std::atomic<bool>>(true);
     impl_->timer.cancel();
 
     auto active = impl_->active;
     impl_->handle = impl_->dispatcher.spawn(
+        strand,
         [this, active, interval, factory = std::move(factory), mode]() -> boost::asio::awaitable<void> {
             if (!*active) co_return;
             while (true) {

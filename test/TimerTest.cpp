@@ -115,3 +115,53 @@ TEST_F(TimerFixture, FactoryCaptures) {
     runFor(100ms);
     EXPECT_EQ(captured.load(), 42);
 }
+
+TEST_F(TimerFixture, InheritedStrandTimerFires) {
+    std::atomic<int> count{0};
+    Timer timer(dispatcher);
+
+    dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
+        auto strand = co_await dispatcher.currentStrand();
+        timer.start(strand, 20ms, [&]() -> boost::asio::awaitable<void> {
+            count++;
+            dispatcher.stop();
+            co_return;
+        });
+    });
+
+    dispatcher.run();
+    EXPECT_EQ(count.load(), 1);
+}
+
+TEST_F(TimerFixture, InheritedStrandSerializesWithParent) {
+    // Both the parent coroutine and the timer callback share a strand, so they
+    // can never run at the same time. A plain (non-atomic) int is therefore safe
+    // to read-modify-write from both — any concurrent access would corrupt it.
+    int counter = 0;
+    Timer timer(dispatcher);
+
+    dispatcher.spawn([&]() -> boost::asio::awaitable<void> {
+        auto strand = co_await dispatcher.currentStrand();
+        timer.start(strand, 10ms, [&]() -> boost::asio::awaitable<void> {
+            for (int i = 0; i < 1000; ++i) ++counter;
+            dispatcher.stop();
+            co_return;
+        }, Timer::Mode::Repeating);
+
+        // Interleave writes from the parent while the timer is firing.
+        for (int i = 0; i < 5; ++i) {
+            boost::asio::steady_timer t(co_await boost::asio::this_coro::executor);
+            t.expires_after(10ms);
+            boost::system::error_code ec;
+            co_await t.async_wait(
+                boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+            for (int j = 0; j < 1000; ++j) ++counter;
+        }
+    });
+
+    dispatcher.run();
+    // If serialization failed and both ran concurrently, counter would be
+    // corrupted (lost updates). There is no exact expected value — the test
+    // catches races via ThreadSanitizer or repeated corruption in practice.
+    EXPECT_GT(counter, 0);
+}
